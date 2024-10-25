@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automatic Barcode Detection</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Automatic Barcode Detection</h1>
+    <button id="toggleCamera">Turn On Camera</button>
+    <video id="video" autoplay style="display: none;"></video>
+    <p id="result">Waiting for barcodes...</p>
+    <button id="clear">Clear</button>
+    
+    <script>
+        const video = document.getElementById('video');
+        const result = document.getElementById('result');
+        const toggleButton = document.getElementById('toggleCamera');
+        const clearButton = document.getElementById('clear');
+        let socket = null;
+        let stream = null;
+        let frameInterval = null;
+
+        clearButton.addEventListener('click', () => {
+            result.innerText = "Waiting for barcodes...";
+        });
+
+        // Toggle camera on/off
+        toggleButton.addEventListener('click', () => {
+            if (stream) {
+                stopCamera();
+                toggleButton.innerText = 'Turn On Camera';
+            } else {
+                startCamera();
+                toggleButton.innerText = 'Turn Off Camera';
+            }
+        });
+
+        function connectSocket() {
+            // Reconnect the WebSocket
+            socket = io.connect('http://localhost:5000');  // Adjust the port if needed
+
+            // Handle detected barcodes from the server
+            socket.on('barcode_detected', (data) => {
+                const barcodes = data.barcodes;
+                result.innerText = barcodes.length ? `Detected barcodes: ${JSON.stringify(barcodes)}` : "No barcode detected.";
+    
+                if (barcodes.length > 0) {
+                    stopCamera();
+                    toggleButton.innerText = 'Turn On Camera';
+                    console.log("Camera turned off after detection");
+                }
+            });
+        }
+
+        function startCamera() {
+            connectSocket();  // Connect WebSocket whenever the camera is turned on
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(cameraStream => {
+                    video.srcObject = cameraStream;
+                    video.style.display = 'block';
+                    stream = cameraStream;
+
+                    // Start sending frames every 500ms
+                    frameInterval = setInterval(sendFrame, 500);
+                })
+                .catch(error => {
+                    console.error("Error accessing camera:", error);
+                });
+        }
+
+        function stopCamera() {
+            // Stop video stream
+            stream.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+            video.style.display = 'none';
+            stream = null;
+
+            // Stop sending frames and disconnect WebSocket
+            clearInterval(frameInterval);
+            if (socket) socket.disconnect();
+        }
+
+        // Send frames to the server
+        function sendFrame() {
+            if (!stream || !socket.connected) return;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas to base64 and emit the frame
+            const imageData = canvas.toDataURL('image/jpeg');
+            socket.emit('frame', imageData);
+        }
+    </script>
+</body>
+</html>
