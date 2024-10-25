@@ -5,3 +5,6 @@ pip install -r requirements.txt
 
 .env need 
 SECRET_KEY 
+
+to dev project
+flask --app app.py run
