@@ -1,0 +1,25 @@
+version: '3'
+services:
+  flask:
+    container_name: flaskvision
+    build:
+      context: .
+    ports:
+      - 5000:5000
+    restart: always
+    networks:
+      - vision-net
+  nginx:
+    container_name: nginxvision
+    build:
+      context: ./nginx
+    ports:
+      - 80:80
+    depends_on:
+      - flask
+    restart: always
+    networks:
+      - vision-net
+networks:
+  vision-net:
+    driver: bridge  
