@@ -18,10 +18,11 @@ pathenv = Path('./.env')
 load_dotenv(dotenv_path=pathenv)
 config = dotenv_values() 
 app.config['SECRET_KEY'] = config.get('SECRET_KEY') or 'you-will-never-guess'
+FONTEND_URL = config.get('FONTEND_URL') or 'http://localhost:3000'
 # Allow CORS for all routes in Flask
-CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000"]}})
+CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL ]}})
 # Set accepted origins explicitly for SocketIO
-socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000"])
+socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL])
 
 @app.route("/")
 def hello_world():
@@ -138,5 +139,5 @@ def handle_frame(data):
         emit('barcode_detected', {'barcodes': barcodes})
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000)
     # main()

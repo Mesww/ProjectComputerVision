@@ -1,23 +1,22 @@
-# Use the official Python base image
+# Start with your base image (e.g., Python 3.10)
 FROM python:3.10-slim
 
-# Set the working directory in the container
+# Install required libraries for OpenCV, threading, and zbar
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libzbar0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy your application code
 WORKDIR /app
+COPY . /app
 
-# Copy the requirements file to the container
-COPY requirements.txt .
-
-# Install the Python dependencies
+# Install Python dependencies including Gunicorn
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code to the container
-COPY . .
-
-# Expose the port on which the Flask app will run
+# Expose the Flask application port
 EXPOSE 5000
 
-# Set the environment variable for Flask
-ENV FLASK_APP=app.py
-
-# Run the Flask application
-CMD ["flask", "run", "--host=0.0.0.0"]
+# Run the Flask application with Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app", "--worker-class", "gevent", "--workers", "1"]
