@@ -12,17 +12,20 @@ from PIL import Image
 from flask import Flask, render_template, request, jsonify
 from sevice.barcodedetection import detect_and_decode_barcode, save_and_display
 from dotenv import load_dotenv, dotenv_values
+import socket
 
 app = Flask(__name__)
+hostname = socket.gethostname()
 pathenv = Path('./.env')
+local_ip = socket.gethostbyname(hostname)
 load_dotenv(dotenv_path=pathenv)
 config = dotenv_values() 
 app.config['SECRET_KEY'] = config.get('SECRET_KEY') or 'you-will-never-guess'
 FONTEND_URL = config.get('FONTEND_URL') or 'http://localhost:3000'
 # Allow CORS for all routes in Flask
-CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL ]}})
-# Set accepted origins explicitly for SocketIO
-socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL])
+CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL,f"http://{local_ip}" ]}})
+# Set accepted origins explicitly for SocketIO,f"http://{local_ip}"
+socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL,f"http://{local_ip}"])
 
 @app.route("/")
 def hello_world():
