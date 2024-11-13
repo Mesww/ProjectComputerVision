@@ -14,16 +14,25 @@ from sevice.barcodedetection import detect_and_decode_barcode, save_and_display,
 from dotenv import load_dotenv, dotenv_values
 import socket
 
+
 app = Flask(__name__)
 hostname = socket.gethostname()
 pathenv = Path('./.env')
 local_ip = socket.gethostbyname(hostname)
 load_dotenv(dotenv_path=pathenv)
 config = dotenv_values() 
-app.config['SECRET_KEY'] = config.get('SECRET_KEY') or 'you-will-never-guess'
+app.config['SECRET_KEY'] = config.get('SECRET_KEY') or 'you-will-never-give-you-up'
 FONTEND_URL = config.get('FONTEND_URL') or 'http://localhost:3000'
 CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80", FONTEND_URL, f"http://{local_ip}"]}})
 socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80", FONTEND_URL, f"http://{local_ip}"])
+
+
+# async def get_db():
+#     db = SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         await db.close()
 
 @app.route("/")
 def hello_world():

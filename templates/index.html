@@ -5,25 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Automatic Barcode Detection</title>
     <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .video-container, .result-container {
+            margin-bottom: 20px;
+        }
+        video, #processedImage {
+            width: 100%;
+            max-width: 640px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        #result {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Automatic Barcode Detection</h1>
-    <button id="toggleCamera">Turn On Camera</button>
-    <video id="video" autoplay style="display: none;"></video>
-    <div>
-        <h2>Original Image</h2>
-        <img id="originalImage" alt="Original Image" width="300">
-    </div>
-    <div>
-        <h2>Processed Image</h2>
-        <img id="processedImage" alt="Processed Image" width="300">
-    </div>
-    <p id="result">Waiting for barcodes...</p>
-    <button id="clear">Clear</button>
+    <div class="container">
+        <h1>Automatic Barcode Detection</h1>
+        
+        <div class="video-container">
+            <button id="toggleCamera">Turn On Camera</button>
+            <video id="video" autoplay style="display: none;"></video>
+        </div>
 
+        <div class="result-container">
+            <h2>Detection Result</h2>
+            <p id="result">Waiting for barcodes...</p>
+            <img id="processedImage" style="display: none;" alt="Processed image with detected barcode">
+            <button id="clear">Clear</button>
+        </div>
+    </div>
+    
     <script>
         const video = document.getElementById('video');
         const result = document.getElementById('result');
+        const processedImage = document.getElementById('processedImage');
         const toggleButton = document.getElementById('toggleCamera');
         const clearButton = document.getElementById('clear');
         const originalImage = document.getElementById('originalImage');
@@ -34,8 +63,7 @@
 
         clearButton.addEventListener('click', () => {
             result.innerText = "Waiting for barcodes...";
-            originalImage.src = "";
-            processedImage.src = "";
+            processedImage.style.display = 'none';
         });
 
         toggleButton.addEventListener('click', () => {
@@ -53,12 +81,16 @@
 
             socket.on('barcode_detected', (data) => {
                 const barcodes = data.barcodes;
-                result.innerText = barcodes.length ? `Detected barcodes: ${JSON.stringify(barcodes)}` : "No barcode detected.";
-
-                // แสดงรูปภาพก่อนและหลังการประมวลผล
-                originalImage.src = `data:image/png;base64,${data.original_image}`;
-                processedImage.src = `data:image/png;base64,${data.processed_image}`;
-
+                result.innerText = barcodes.length ? 
+                    `Detected barcodes: ${JSON.stringify(barcodes)}` : 
+                    "No barcode detected.";
+                
+                // Display the processed image
+                if (data.processed_image) {
+                    processedImage.src = data.processed_image;
+                    processedImage.style.display = 'block';
+                }
+                
                 if (barcodes.length > 0) {
                     stopCamera();
                     toggleButton.innerText = 'Turn On Camera';
@@ -72,6 +104,7 @@
                 .then(cameraStream => {
                     video.srcObject = cameraStream;
                     video.style.display = 'block';
+                    processedImage.style.display = 'none';
                     stream = cameraStream;
                     frameInterval = setInterval(sendFrame, 500);
                 })
@@ -97,7 +130,7 @@
             canvas.height = video.videoHeight;
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
+            
             const imageData = canvas.toDataURL('image/jpeg');
             socket.emit('frame', imageData);
         }
