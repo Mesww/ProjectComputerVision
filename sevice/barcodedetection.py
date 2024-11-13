@@ -38,15 +38,20 @@ def histogram_matching(image, reference_image):
     return exposure.match_histograms(image, reference_image, multichannel=False)
 
 # Edge detection function
-def edge_detection(image):
-    return cv2.Canny(image, 100, 200)
+def edge_detection(image, low_threshold=100, high_threshold=200):
+    return cv2.Canny(image, low_threshold, high_threshold)
 
 # Morphological operations function
-def morphological_operations(image):
+def morphological_operations(image, operation='dilation'):
     kernel = np.ones((5, 5), np.uint8)
-    dilated = cv2.dilate(image, kernel, iterations=1)
-    eroded = cv2.erode(dilated, kernel, iterations=1)
-    return eroded
+    if operation == 'dilation':
+        return cv2.dilate(image, kernel, iterations=1)
+    elif operation == 'erosion':
+        return cv2.erode(image, kernel, iterations=1)
+    elif operation == 'opening':
+        return cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
+    elif operation == 'closing':
+        return cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
 
 # Function to apply interpolation
 def apply_interpolation(image, scale=1.0, interpolation=cv2.INTER_CUBIC):
