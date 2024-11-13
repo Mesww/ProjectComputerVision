@@ -1,9 +1,6 @@
 import cv2
 import numpy as np
 from pyzbar.pyzbar import decode
-import os
-import sys
-from PIL import Image
 
 def enhance_barcode_image(image):
     """
@@ -49,8 +46,6 @@ def detect_and_decode_barcode(image):
     for obj in decoded_objects:
         barcode_data = obj.data.decode('utf-8')
         barcode_type = obj.type
-        points = obj.polygon
-
         points = obj.polygon
 
         if points is not None and len(points) > 4:
@@ -111,45 +106,3 @@ def save_and_display(image, title="Processed Image"):
     except Exception as e:
         print(f"Could not display image: {e}")
         print("Image has been saved to disk instead.")
-
-
-# def detect_barcode(image):
-#     # Step 1: Convert to grayscale
-#     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-#     # Step 2: Compute the gradient of the image
-#     gradX = cv2.Sobel(gray, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
-#     gradY = cv2.Sobel(gray, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=-1)
-    
-#     # Subtract gradients
-#     gradient = cv2.subtract(gradX, gradY)
-#     gradient = cv2.convertScaleAbs(gradient)
-
-#     # Step 3: Blur and threshold the image
-#     blurred = cv2.blur(gradient, (9, 9))
-#     _, thresh = cv2.threshold(blurred, 225, 255, cv2.THRESH_BINARY)
-
-#     # Step 4: Erode and dilate the image to clean up
-#     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 7))
-#     closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-
-#     # Perform series of erosions and dilations
-#     closed = cv2.erode(closed, None, iterations=4)
-#     closed = cv2.dilate(closed, None, iterations=4)
-
-#     # Step 5: Find contours in the image
-#     contours, _ = cv2.findContours(closed.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-#     if contours:
-#         # Sort contours by area, largest first
-#         c = sorted(contours, key=cv2.contourArea, reverse=True)[0]
-        
-#         # Compute the rotated bounding box of the largest contour
-#         rect = cv2.minAreaRect(c)
-#         box = cv2.boxPoints(rect)
-#         box = np.int32(box)
-
-#         # Draw the bounding box on the image
-#         cv2.drawContours(image, [box], -1, (0, 255, 0), 3)
-
-#     return image

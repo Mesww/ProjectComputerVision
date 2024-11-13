@@ -10,23 +10,34 @@
     <h1>Automatic Barcode Detection</h1>
     <button id="toggleCamera">Turn On Camera</button>
     <video id="video" autoplay style="display: none;"></video>
+    <div>
+        <h2>Original Image</h2>
+        <img id="originalImage" alt="Original Image" width="300">
+    </div>
+    <div>
+        <h2>Processed Image</h2>
+        <img id="processedImage" alt="Processed Image" width="300">
+    </div>
     <p id="result">Waiting for barcodes...</p>
     <button id="clear">Clear</button>
-    
+
     <script>
         const video = document.getElementById('video');
         const result = document.getElementById('result');
         const toggleButton = document.getElementById('toggleCamera');
         const clearButton = document.getElementById('clear');
+        const originalImage = document.getElementById('originalImage');
+        const processedImage = document.getElementById('processedImage');
         let socket = null;
         let stream = null;
         let frameInterval = null;
 
         clearButton.addEventListener('click', () => {
             result.innerText = "Waiting for barcodes...";
+            originalImage.src = "";
+            processedImage.src = "";
         });
 
-        // Toggle camera on/off
         toggleButton.addEventListener('click', () => {
             if (stream) {
                 stopCamera();
@@ -38,31 +49,30 @@
         });
 
         function connectSocket() {
-            // Reconnect the WebSocket
-            socket = io.connect('http://localhost:5000');  // Adjust the port if needed
+            socket = io.connect('http://localhost:5000');
 
-            // Handle detected barcodes from the server
             socket.on('barcode_detected', (data) => {
                 const barcodes = data.barcodes;
                 result.innerText = barcodes.length ? `Detected barcodes: ${JSON.stringify(barcodes)}` : "No barcode detected.";
-    
+
+                // แสดงรูปภาพก่อนและหลังการประมวลผล
+                originalImage.src = `data:image/png;base64,${data.original_image}`;
+                processedImage.src = `data:image/png;base64,${data.processed_image}`;
+
                 if (barcodes.length > 0) {
                     stopCamera();
                     toggleButton.innerText = 'Turn On Camera';
-                    console.log("Camera turned off after detection");
                 }
             });
         }
 
         function startCamera() {
-            connectSocket();  // Connect WebSocket whenever the camera is turned on
+            connectSocket();
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
                 .then(cameraStream => {
                     video.srcObject = cameraStream;
                     video.style.display = 'block';
                     stream = cameraStream;
-
-                    // Start sending frames every 500ms
                     frameInterval = setInterval(sendFrame, 500);
                 })
                 .catch(error => {
@@ -71,28 +81,23 @@
         }
 
         function stopCamera() {
-            // Stop video stream
             stream.getTracks().forEach(track => track.stop());
             video.srcObject = null;
             video.style.display = 'none';
             stream = null;
-
-            // Stop sending frames and disconnect WebSocket
             clearInterval(frameInterval);
             if (socket) socket.disconnect();
         }
 
-        // Send frames to the server
         function sendFrame() {
             if (!stream || !socket.connected) return;
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Convert canvas to base64 and emit the frame
             const imageData = canvas.toDataURL('image/jpeg');
             socket.emit('frame', imageData);
         }
