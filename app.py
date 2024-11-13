@@ -1,3 +1,4 @@
+# app.py
 import base64
 from io import BytesIO
 from flask_cors import CORS
@@ -27,14 +28,6 @@ FONTEND_URL = config.get('FONTEND_URL') or 'http://localhost:3000'
 CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL,f"http://{local_ip}" ]}})
 # Set accepted origins explicitly for SocketIO,f"http://{local_ip}"
 socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL,f"http://{local_ip}"])
-
-
-# async def get_db():
-#     db = SessionLocal()
-#     try:
-#         yield db
-#     finally:
-#         await db.close()
 
 @app.route("/")
 def hello_world():
@@ -133,30 +126,44 @@ def scan_barcode():
 
 @socketio.on('frame')
 def handle_frame(data):
-    # Convert the received image data to a PIL image
-    image_data = data.split(',')[1]
-    image = Image.open(BytesIO(base64.b64decode(image_data)))
-    image_np = np.array(image)
+    try:
+        # Convert the received image data to a PIL image
+        image_data = data.split(',')[1]
+        image = Image.open(BytesIO(base64.b64decode(image_data)))
+        image_np = np.array(image)
 
-    # Convert RGB to BGR
-    if len(image_np.shape) == 3:
-        image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        # Convert RGB to BGR if needed
+        if len(image_np.shape) == 3:
+            image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
-    # Detect barcodes
-    enhanced, decoded_objects = detect_and_decode_barcode(image_np)
+        # Detect barcodes
+        original, enhanced, decoded_objects = detect_and_decode_barcode(image_np, debug=True)
 
-    # Convert the processed image back to base64 for sending to frontend
-    _, buffer = cv2.imencode('.jpg', enhanced)
-    processed_image = base64.b64encode(buffer).decode('utf-8')
+        # Convert images back to base64
+        _, buffer_original = cv2.imencode('.jpg', original)
+        _, buffer_enhanced = cv2.imencode('.jpg', enhanced)
+        
+        original_image = base64.b64encode(buffer_original).decode('utf-8')
+        processed_image = base64.b64encode(buffer_enhanced).decode('utf-8')
 
-    # Return decoded barcode data and processed image to the frontend
-    barcodes = [{"type": obj.type, "data": obj.data.decode('utf-8')} for obj in decoded_objects]
-    if barcodes:
-        emit('barcode_detected', {
-            'barcodes': barcodes,
-            'processed_image': f'data:image/jpeg;base64,{processed_image}'
-        })
+        # Return results
+        barcodes = [{"type": obj.type, "data": obj.data.decode('utf-8')} for obj in decoded_objects]
+        if barcodes:
+            emit('barcode_detected', {
+                'barcodes': barcodes,
+                'original_image': f'data:image/jpeg;base64,{original_image}',
+                'processed_image': f'data:image/jpeg;base64,{processed_image}'
+            })
+        else:
+            emit('barcode_not_detected', {
+                'message': 'ไม่พบบาร์โค้ดในภาพ กรุณาลองใหม่อีกครั้ง',
+                'original_image': f'data:image/jpeg;base64,{original_image}',
+                'processed_image': f'data:image/jpeg;base64,{processed_image}'
+            })
+            
+    except Exception as e:
+        print(f"Error processing frame: {str(e)}")
+        emit('error', {'message': f'เกิดข้อผิดพลาด: {str(e)}'})
 
 if __name__ == "__main__":
     socketio.run(app, host='0.0.0.0', port=5000)
-    # main()
