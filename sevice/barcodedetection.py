@@ -6,18 +6,72 @@ from pyzbar.pyzbar import decode
 import os
 import sys
 from PIL import Image
+from skimage import exposure
+from skimage.measure import label, regionprops
+from skimage.feature import match_template
 
-def enhance_barcode_image(image, debug=False):
-    """
-    Enhance image for better barcode detection
-    
-    Args:
-        image: Input image (BGR format)
-        debug: If True, returns debug information
-    
-    Returns:
-        Enhanced image and debug images dictionary if debug=True
-    """
+
+# Frequency domain filtering function
+def frequency_domain_filtering(image, cutoff=30):
+    img_float = np.float32(image)
+    dft = cv2.dft(img_float, flags=cv2.DFT_COMPLEX_OUTPUT)
+    dft_shift = np.fft.fftshift(dft)
+    rows, cols = image.shape
+    crow, ccol = rows // 2, cols // 2
+    mask = np.ones((rows, cols, 2), np.uint8)
+    r = cutoff
+    center = [crow, ccol]
+    cv2.circle(mask, center, r, 0, -1)
+    fshift = dft_shift * mask
+    f_ishift = np.fft.ifftshift(fshift)
+    img_back = cv2.idft(f_ishift)
+    img_back = cv2.magnitude(img_back[:, :, 0], img_back[:, :, 1])
+    return np.uint8(img_back)
+
+# Sharpening function
+def sharpen_image(image):
+    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])  # Sharpening kernel
+    return cv2.filter2D(image, -1, kernel)
+
+# Histogram matching function
+def histogram_matching(image, reference_image):
+    return exposure.match_histograms(image, reference_image, multichannel=False)
+
+# Edge detection function
+def edge_detection(image):
+    return cv2.Canny(image, 100, 200)
+
+# Morphological operations function
+def morphological_operations(image):
+    kernel = np.ones((5, 5), np.uint8)
+    dilated = cv2.dilate(image, kernel, iterations=1)
+    eroded = cv2.erode(dilated, kernel, iterations=1)
+    return eroded
+
+# Function to apply interpolation
+def apply_interpolation(image, scale=1.0, interpolation=cv2.INTER_CUBIC):
+    height, width = image.shape[:2]
+    new_width = int(width * scale)
+    new_height = int(height * scale)
+    dim = (new_width, new_height)
+    resized_image = cv2.resize(image, dim, interpolation=interpolation)
+    return resized_image
+
+# Geometric transformation functions (e.g., rotation, scaling, affine)
+def rotate_image(image, angle):
+    height, width = image.shape[:2]
+    center = (width // 2, height // 2)
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1)
+    rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
+    return rotated_image
+
+def affine_transform(image, matrix):
+    height, width = image.shape[:2]
+    transformed_image = cv2.warpAffine(image, matrix, (width, height))
+    return transformed_image
+
+# Image enhancement for barcode detection
+def enhance_barcode_image(image, reference_image=None, debug=False):
     debug_images = {}
     
     # Convert to grayscale
@@ -25,49 +79,61 @@ def enhance_barcode_image(image, debug=False):
     if debug:
         debug_images['1_grayscale'] = gray.copy()
     
+    # Apply frequency domain filtering
+    freq_filtered = frequency_domain_filtering(gray)
+    if debug:
+        debug_images['2_freq_filtered'] = freq_filtered.copy()
+    
+    # Apply sharpening
+    sharpened = sharpen_image(freq_filtered)
+    if debug:
+        debug_images['3_sharpened'] = sharpened.copy()
+    
+    # Apply edge detection
+    edges = edge_detection(sharpened)
+    if debug:
+        debug_images['4_edges'] = edges.copy()
+    
+    # Apply morphological operations
+    morph_image = morphological_operations(edges)
+    if debug:
+        debug_images['5_morphology'] = morph_image.copy()
+    
     # Apply adaptive thresholding
     thresh = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        morph_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
         cv2.THRESH_BINARY, 51, 9
     )
     if debug:
-        debug_images['2_threshold'] = thresh.copy()
+        debug_images['6_threshold'] = thresh.copy()
     
     # Noise reduction
     denoised = cv2.fastNlMeansDenoising(thresh, None, 10, 7, 21)
     if debug:
-        debug_images['3_denoised'] = denoised.copy()
+        debug_images['7_denoised'] = denoised.copy()
     
     # Increase contrast
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     enhanced = clahe.apply(denoised)
     if debug:
-        debug_images['4_enhanced'] = enhanced.copy()
+        debug_images['8_enhanced'] = enhanced.copy()
+
+    # Apply histogram matching if reference image is provided
+    if reference_image is not None:
+        enhanced = histogram_matching(enhanced, reference_image)
+        if debug:
+            debug_images['9_histogram_matched'] = enhanced.copy()
     
     return enhanced, debug_images if debug else None
 
-def detect_and_decode_barcode(image, debug=False):
-    """
-    Detect and decode barcodes using multiple processing methods
-    
-    Args:
-        image: Input image (BGR format)
-        debug: If True, returns debug information
-    
-    Returns:
-        Tuple of (original image, enhanced image, decoded objects)
-    """
-    # Keep a copy of original image
+# Barcode detection and decoding function
+def detect_and_decode_barcode(image, reference_image=None, debug=False):
     original_image = image.copy()
     decoded_objects = []
     
-    # Convert to grayscale if image is color
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image.copy()
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # Try different processing methods
     processing_methods = [
         lambda img: img,  # Original
         lambda img: cv2.GaussianBlur(img, (5, 5), 0),  # Blur
@@ -79,7 +145,6 @@ def detect_and_decode_barcode(image, debug=False):
     for process in processing_methods:
         processed = process(gray)
         
-        # Try different scaling factors
         for scale in [1.0, 1.5, 2.0]:
             if scale != 1.0:
                 width = int(processed.shape[1] * scale)
@@ -89,7 +154,6 @@ def detect_and_decode_barcode(image, debug=False):
             else:
                 scaled = processed
             
-            # Try normal and inverted
             for img in [scaled, cv2.bitwise_not(scaled)]:
                 decoded = decode(img)
                 if decoded:
@@ -101,19 +165,16 @@ def detect_and_decode_barcode(image, debug=False):
         if decoded_objects:
             break
     
-    # If still no detection, try advanced enhancement
     if not decoded_objects:
-        enhanced, debug_images = enhance_barcode_image(image, debug=debug)
+        enhanced, debug_images = enhance_barcode_image(image, reference_image, debug=debug)
         if debug and debug_images:
             for step_name, img in debug_images.items():
                 cv2.imwrite(f"{step_name}.png", img)
         
         decoded_objects = decode(enhanced)
     
-    # Draw detected barcodes if any found
     if decoded_objects:
         for obj in decoded_objects:
-            # Draw boundary
             points = obj.polygon
             if points is None:
                 continue
@@ -128,33 +189,21 @@ def detect_and_decode_barcode(image, debug=False):
                         (int(points[j][0]), int(points[j][1])),
                         (int(points[(j+1) % n][0]), int(points[(j+1) % n][1])),
                         (0, 255, 0), 2)
-                
-                if enhanced is not None:
-                    cv2.line(enhanced,
-                            (int(points[j][0]), int(points[j][1])),
-                            (int(points[(j+1) % n][0]), int(points[(j+1) % n][1])),
-                            (0, 255, 0), 2)
             
-            # Add text annotation
             barcode_data = obj.data.decode('utf-8')
             barcode_type = obj.type
             x, y = points[0]
             cv2.putText(original_image, f"{barcode_data} ({barcode_type})",
                       (int(x), int(y) - 10),
                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                      
-            if enhanced is not None:
-                cv2.putText(enhanced, f"{barcode_data} ({barcode_type})",
-                          (int(x), int(y) - 10),
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                          
-            print(f"Found {barcode_type} barcode: {barcode_data}")
     else:
         print("No barcodes detected in the image")
         if enhanced is None:
             enhanced = image.copy()
             
     return original_image, enhanced, decoded_objects
+
+
 def save_and_display(image, title="Processed Image"):
     """
     Save image and attempt to display using PIL
