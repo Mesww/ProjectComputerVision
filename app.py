@@ -14,18 +14,27 @@ from sevice.barcodedetection import detect_and_decode_barcode, save_and_display
 from dotenv import load_dotenv, dotenv_values
 import socket
 
+
 app = Flask(__name__)
 hostname = socket.gethostname()
 pathenv = Path('./.env')
 local_ip = socket.gethostbyname(hostname)
 load_dotenv(dotenv_path=pathenv)
 config = dotenv_values() 
-app.config['SECRET_KEY'] = config.get('SECRET_KEY') or 'you-will-never-guess'
+app.config['SECRET_KEY'] = config.get('SECRET_KEY') or 'you-will-never-give-you-up'
 FONTEND_URL = config.get('FONTEND_URL') or 'http://localhost:3000'
 # Allow CORS for all routes in Flask
 CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL,f"http://{local_ip}" ]}})
 # Set accepted origins explicitly for SocketIO,f"http://{local_ip}"
 socketio = SocketIO(app, cors_allowed_origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://localhost:80",FONTEND_URL,f"http://{local_ip}"])
+
+
+# async def get_db():
+#     db = SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         await db.close()
 
 @app.route("/")
 def hello_world():
@@ -134,12 +143,19 @@ def handle_frame(data):
         image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
     # Detect barcodes
-    _, decoded_objects = detect_and_decode_barcode(image_np)
+    enhanced, decoded_objects = detect_and_decode_barcode(image_np)
 
-    # Return decoded barcode data to the frontend
+    # Convert the processed image back to base64 for sending to frontend
+    _, buffer = cv2.imencode('.jpg', enhanced)
+    processed_image = base64.b64encode(buffer).decode('utf-8')
+
+    # Return decoded barcode data and processed image to the frontend
     barcodes = [{"type": obj.type, "data": obj.data.decode('utf-8')} for obj in decoded_objects]
     if barcodes:
-        emit('barcode_detected', {'barcodes': barcodes})
+        emit('barcode_detected', {
+            'barcodes': barcodes,
+            'processed_image': f'data:image/jpeg;base64,{processed_image}'
+        })
 
 if __name__ == "__main__":
     socketio.run(app, host='0.0.0.0', port=5000)
