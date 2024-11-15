@@ -96,7 +96,7 @@ def enhance_barcode_image(image, reference_image=None, debug=False):
     
     # Apply edge detection
     edges = edge_detection(sharpened)
-    if debug:
+    if debug:   
         debug_images['4_edges'] = edges.copy()
     
     # Apply morphological operations
